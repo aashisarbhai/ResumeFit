@@ -71,8 +71,8 @@ def _render_upload_area(analysis_mode: str):
         st.markdown("### 📄 Upload Resume")
         resume_file = st.file_uploader(
             "Choose your resume file",
-            type=["pdf", "doc", "docx"],
-            help="Supported: PDF, DOC, DOCX (max 5 MB)",
+            type=["pdf", "docx"],
+            help="Supported: PDF or DOCX (max 5 MB)",
             key="resume_upload",
         )
         if resume_file:
@@ -187,7 +187,7 @@ def render() -> None:
 
     access_token = st.session_state.get("access_token")
     if not access_token:
-        st.warning("⚠️ Sign in from the sidebar to analyze a resume.")
+        st.warning("Please sign in from the sidebar before analyzing your resume.")
         return
 
     _, mid, _ = st.columns([1, 2, 1])

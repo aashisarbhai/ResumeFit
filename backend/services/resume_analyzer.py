@@ -95,6 +95,15 @@ def analyze_full_resume(
     )
 
     issues_summary = generate_issues_summary(detailed_feedback)
+    critical_issues = [
+        issue.issue_title
+        for issue in detailed_feedback
+        if issue.severity_level.lower() in {'critical', 'high'}
+    ]
+    suggestions = [
+        issue.how_to_fix
+        for issue in detailed_feedback[:5]
+    ]
 
     validated_raw   = skill_validation.get('validated_skills', [])
     unvalidated_raw = skill_validation.get('unvalidated_skills', [])
@@ -139,6 +148,8 @@ def analyze_full_resume(
             if jd_comparison_result else []
         ),
         "strengths": _generate_strengths(parsed_resume, skills, projects, action_verbs, skill_validation, scores),
+        "critical_issues": critical_issues,
+        "suggestions": suggestions,
         "interpretation":    scores.get('overall_interpretation', ''),
         "skill_validation_details": skill_validation_details,
         "experience_months": experience_months,

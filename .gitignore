@@ -1,4 +1,9 @@
 .DS_Store
+.env
+.streamlit/secrets.toml
+venv/
+.venv/
+data/*.sqlite3
 
 __pycache__/
 

@@ -1,6 +1,5 @@
 import io
-import magic
-from typing import Tuple, Optional, Tuple
+from typing import Optional, Tuple
 
 import pdfplumber
 from docx import Document
@@ -18,8 +17,7 @@ from backend.utils.file_utils import(
 
 from backend.core.config import (
     MAX_FILE_SIZE_BYTES,
-    MAX_FILE_SIZE_MB, 
-    SUPPORTED_MIME_TYPES
+    MAX_FILE_SIZE_MB,
 )
 
 class FileParsingError(Exception):
@@ -27,6 +25,17 @@ class FileParsingError(Exception):
 
 class FileValidationError(Exception):
     pass
+
+
+def _detect_file_type(file_data: bytes, filename: str) -> Optional[str]:
+    """Identify supported documents without relying solely on libmagic."""
+    if file_data.startswith(b'%PDF-'):
+        return 'pdf'
+
+    if filename.lower().endswith('.docx') and file_data.startswith(b'PK'):
+        return 'docx'
+    return None
+
 
 def validate_file(file_data:bytes, filename:str)->Tuple[bool, str, Optional[str]]:
     file_size_bytes = len(file_data)
@@ -40,21 +49,13 @@ def validate_file(file_data:bytes, filename:str)->Tuple[bool, str, Optional[str]
     if file_size_bytes==0:
         return False, 'uploade file is empty...please check the file you have uploaded and try again'
     
-    try:
-        mime_type=magic.from_buffer(file_data, mime=True)
-    except Exception as e:
-        return False, f"error deteminin the file type : {e}", None
-    
-    if mime_type not in SUPPORTED_MIME_TYPES:
-        supported=', '.join(SUPPORTED_MIME_TYPES.keys()).upper()
+    file_type = _detect_file_type(file_data, filename)
+    if file_type is None:
         return False, (
-            f'Unsupported file type: {mime_type}. '
-            f'Please upload one of: {supported}.'
+            'Unsupported or invalid file. Please upload a valid PDF or DOCX resume.'
         ), None
-    
-    
 
-    return True, '', SUPPORTED_MIME_TYPES[mime_type]
+    return True, '', file_type
 
 def _extract_pdf_hyperlinks(file_data: bytes) -> str:
     urls = []
@@ -210,7 +211,7 @@ def extract_text(file_data:bytes, file_type:str)->str:
         return extract_text_from_doc(file_data)
     else:
         raise FileValidationError(
-            f'invalid file type: {file_type}. supported types are: pdf, docx and doc'
+            f'invalid file type: {file_type}. supported types are: pdf and docx'
 
 
         )

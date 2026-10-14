@@ -18,6 +18,18 @@ def _auth_headers(access_token: str) -> Dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
+def sign_up(email: str, password: str) -> Dict[str, Any]:
+    response = requests.post(f"{_backend_url()}/api/v1/auth/sign-up", json={"email": email, "password": password}, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
+def sign_in(email: str, password: str) -> Dict[str, Any]:
+    response = requests.post(f"{_backend_url()}/api/v1/auth/sign-in", json={"email": email, "password": password}, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
 def health_check() -> Dict[str, Any]:
     response = requests.get(f"{_backend_url()}/api/v1/health", timeout=10)
     response.raise_for_status()

@@ -7,7 +7,7 @@ from pathlib import Path
 try:
     from dotenv import load_dotenv
     _ENV_PATH = Path(__file__).resolve().parents[2] / '.env'
-    load_dotenv(_ENV_PATH)
+    load_dotenv(_ENV_PATH, override=True)
 except ImportError:
     pass
 
@@ -17,8 +17,13 @@ APP_VERSION='1.0.0'
 APP_DESCRIPTION='analyse resumes against job description using nlp + ml'
 
 ALLOWED_ORIGINS = [
-    'https://appapppy-ktwxupi73vqhjzweksze9d.streamlit.app/'
-]  
+    origin.strip()
+    for origin in os.getenv(
+        'ALLOWED_ORIGINS',
+        'http://localhost:8501,http://127.0.0.1:8501,https://appapppy-ktwxupi73vqhjzweksze9d.streamlit.app',
+    ).split(',')
+    if origin.strip()
+]
 
 #file 
 MAX_FILE_SIZE_MB=5
@@ -27,14 +32,13 @@ MAX_FILE_SIZE_BYTES=MAX_FILE_SIZE_MB*1024*1024
 #Supported MIME types and their short names
 SUPPORTED_MIME_TYPES = {
     'application/pdf': 'pdf',
-    'application/msword': 'doc',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
 }
 
-SUPPORTED_EXTENSIONS = {'.pdf', '.doc', '.docx'}
+SUPPORTED_EXTENSIONS = {'.pdf', '.docx'}
 
 SPACY_MODEL_PRIMARY="en_core_web_md" #better accuracy
-SPACY_MODEL_SECONDARY='"en_core_web_sm' 
+SPACY_MODEL_SECONDARY="en_core_web_sm"
 SENTENCE_TRANSFORMER_MODEL = os.getenv("SENTENCE_TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
 
 # Score component weights — this is business logic treated as config
@@ -51,5 +55,7 @@ SUPABASE_KEY       = os.getenv('SUPABASE_KEY', '')          # service_role — D
 SUPABASE_ANON_KEY  = os.getenv('SUPABASE_ANON_KEY', '')     # public anon — frontend auth calls
 SUPABASE_JWT_SECRET= os.getenv('SUPABASE_JWT_SECRET', '')   # used by backend to verify access tokens
 GROQ_API_KEY       = os.getenv('GROQ_API_KEY', '')
+AUTH_REQUIRED      = os.getenv('AUTH_REQUIRED', 'false').lower() == 'true'
+LOCAL_AUTH_SECRET  = os.getenv('LOCAL_AUTH_SECRET', 'local-development-secret-change-before-deployment')
 
 

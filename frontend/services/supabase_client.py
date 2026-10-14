@@ -10,7 +10,7 @@ logger = logging.getLogger('ats_resume_scorer')
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parents[2] / '.env')
+    load_dotenv(Path(__file__).resolve().parents[2] / '.env', override=True)
 except ImportError:
     pass
 
@@ -28,13 +28,6 @@ def _secret(key: str, section: str = 'supabase') -> str:
 
 SUPABASE_URL = _secret('SUPABASE_URL')
 SUPABASE_ANON_KEY = _secret('SUPABASE_ANON_KEY')
-
-OAUTH_REDIRECT_URL = (
-    os.getenv('AUTH_REDIRECT_URL')
-    or _secret('redirect_uri', 'google_oauth')
-    or 'http://localhost:8501'
-)
-
 
 def _missing_config() -> str | None:
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
@@ -88,43 +81,6 @@ def sign_up_with_password(email: str, password: str) -> Dict[str, Any]:
         return {'error': 'Sign-up failed'}
     except Exception as exc:
         logger.warning(f'sign_up failed: {exc}')
-        return {'error': _humanize(exc)}
-
-
-def google_oauth_url() -> Dict[str, Any]:
-    err = _missing_config()
-    if err:
-        return {'error': err}
-    try:
-        resp = get_client().auth.sign_in_with_oauth({
-            'provider': 'google',
-            'options': {'redirect_to': OAUTH_REDIRECT_URL},
-        })
-        return {'url': resp.url}
-    except Exception as exc:
-        logger.warning(f'oauth url generation failed: {exc}')
-        return {'error': _humanize(exc)}
-
-
-def exchange_code_for_session(auth_code: str) -> Dict[str, Any]:
-    """Called once after the OAuth provider redirects back with `?code=...`."""
-    err = _missing_config()
-    if err:
-        return {'error': err}
-    client = get_client()
-    try:
-        storage_key = f'{client.auth._storage_key}-code-verifier'
-        code_verifier = client.auth._storage.get_item(storage_key) or ''
-        resp = client.auth.exchange_code_for_session({
-            'auth_code': auth_code,
-            'code_verifier': code_verifier,
-            'redirect_to': OAUTH_REDIRECT_URL,
-        })
-        if not resp.session or not resp.user:
-            return {'error': 'OAuth exchange returned no session'}
-        return _session_dict(resp.session, resp.user)
-    except Exception as exc:
-        logger.warning(f'exchange_code_for_session failed: {exc}')
         return {'error': _humanize(exc)}
 
 

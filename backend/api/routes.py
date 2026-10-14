@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from backend.api.auth import get_current_user
-from backend.models.schemas import AnalysisResponse, ComponentScores, JDComparison, SkillValidationDetails
+from backend.models.schemas import AnalysisResponse, AuthCredentials, ComponentScores, JDComparison, SkillValidationDetails
 from backend.utils.file_utils import (
     get_default_grammar_results,
     get_default_location_results,
@@ -14,6 +14,25 @@ from backend.utils.file_utils import (
 logger = logging.getLogger('ats_resume_scorer')
 
 router = APIRouter(prefix='/api/v1', tags=['Analysis'])
+
+
+@router.post('/auth/sign-up', tags=['Authentication'])
+async def sign_up(credentials: AuthCredentials):
+    """Create a local account without requiring Supabase."""
+    from backend.database.local_auth import create_user
+    try:
+        return create_user(credentials.email, credentials.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post('/auth/sign-in', tags=['Authentication'])
+async def sign_in(credentials: AuthCredentials):
+    from backend.database.local_auth import authenticate_user
+    try:
+        return authenticate_user(credentials.email, credentials.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 def _clean(text: str) -> str:
     for prefix in ('✅', '🌟', '❌', '⚠️', '📝', '🔴', '🟡', '🟢', '🟠', '👍'):
@@ -107,6 +126,10 @@ async def analyze_resume(
         keyword_match=jd_comparison_result.match_percentage if jd_comparison_result else 0.0,
         missing_keywords=result.get('missing_keywords', []),
         matched_keywords=result.get('matched_keywords', []),
+        strengths=result.get('strengths', []),
+        critical_issues=result.get('critical_issues', []),
+        suggestions=result.get('suggestions', []),
+        warnings=warnings,
         skills=list(result.get('skills', [])[:20]),
         jd_comparison=jd_comparison_result,
         interpretation=result.get('interpretation', '')

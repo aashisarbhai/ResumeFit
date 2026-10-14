@@ -27,7 +27,6 @@ rapidfuzz>=3.6
 pdfplumber>=0.11
 PyPDF2>=3.0
 python-docx>=1.1
-python-magic>=0.4.27
 
 # ── Backend: PDF report generation ──
 jinja2>=3.1

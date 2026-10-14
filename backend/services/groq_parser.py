@@ -1,7 +1,8 @@
 import os
 import json 
 import logging
-from typing import Dict
+import re
+from typing import Dict, List
 
 from groq import Groq
 
@@ -108,14 +109,14 @@ def _try_parse_json(text: str) -> dict | None:
     except json.JSONDecodeError:
         return None
     
-def parse_resume(raw_text: str)->Dict:
+def _parse_resume_with_groq(raw_text: str)->Dict:
 
     client=_get_client()
     prompt=RESUME_USER_PROMPT.format(raw_text=raw_text)
     raw_response=_call_groq(client, RESUME_SYSTEM_PROMPT, prompt)
     result=_try_parse_json(raw_response)
 
-    if result is None:
+    if result is not None:
         return _validate_resume_result(result)
     
 
@@ -160,7 +161,7 @@ Important instructions:
 Job Description Text:
 {raw_text}"""
 
-def parse_job_description(raw_text: str) -> Dict:
+def _parse_job_description_with_groq(raw_text: str) -> Dict:
     client = _get_client()
     prompt = JD_USER_PROMPT.format(raw_text=raw_text)
 
@@ -183,6 +184,117 @@ def parse_job_description(raw_text: str) -> Dict:
     raise ValueError(
         f"Groq returned unparseable response after retry. Raw response:\n{raw_response[:500]}"
     )
+
+
+_KNOWN_SKILLS = (
+    'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'sql', 'html', 'css',
+    'react', 'angular', 'vue', 'node.js', 'express', 'django', 'flask', 'fastapi',
+    'spring boot', 'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'git', 'linux',
+    'postgresql', 'mysql', 'mongodb', 'redis', 'tensorflow', 'pytorch', 'scikit-learn',
+    'machine learning', 'data analysis', 'power bi', 'tableau', 'excel', 'figma',
+    'rest api', 'graphql', 'agile', 'scrum', 'communication', 'leadership',
+)
+
+
+def _section_text(text: str, headings: List[str]) -> str:
+    heading_set = {heading.lower() for heading in headings}
+    lines = text.splitlines()
+    start = next(
+        (
+            index + 1
+            for index, line in enumerate(lines)
+            if line.strip().rstrip(':').lower() in heading_set
+        ),
+        None,
+    )
+    if start is None:
+        return ''
+
+    section_lines = []
+    for line in lines[start:]:
+        stripped = line.strip().rstrip(':')
+        if re.fullmatch(r'[A-Z][A-Z &/]{2,}', stripped):
+            break
+        section_lines.append(line)
+    return '\n'.join(section_lines).strip()
+
+
+def _extract_known_skills(text: str) -> List[str]:
+    lower_text = text.lower()
+    return [
+        skill for skill in _KNOWN_SKILLS
+        if re.search(rf'(?<!\w){re.escape(skill)}(?!\w)', lower_text)
+    ]
+
+
+def _local_resume_parse(raw_text: str) -> Dict:
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    email_match = re.search(r'[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}', raw_text)
+    phone_match = re.search(r'(?<!\w)(?:\+?\d{1,3}[ .-]?)?(?:\(?\d{3,5}\)?[ .-]?)?\d{3,5}[ .-]\d{4}(?!\w)', raw_text)
+    linkedin_match = re.search(r'(?:https?://)?(?:www\.)?linkedin\.com/in/[^\s|,]+', raw_text, re.I)
+    github_match = re.search(r'(?:https?://)?(?:www\.)?github\.com/[^\s|,]+', raw_text, re.I)
+    experience_text = _section_text(raw_text, ['experience', 'work experience', 'employment', 'internships'])
+    projects_text = _section_text(raw_text, ['projects', 'personal projects', 'academic projects'])
+    education_text = _section_text(raw_text, ['education', 'academic background'])
+    skills_text = _section_text(raw_text, ['skills', 'technical skills', 'core competencies'])
+    summary_text = _section_text(raw_text, ['summary', 'professional summary', 'profile', 'objective', 'about me'])
+    skills = _extract_known_skills(f'{skills_text}\n{raw_text}')
+    action_verbs = re.findall(
+        r'(?im)^\s*(?:[â€¢*\-]|\d+[.)])?\s*(developed|implemented|designed|built|led|managed|optimized|automated|created|deployed|improved|reduced|increased)\b',
+        raw_text,
+    )
+    return _validate_resume_result({
+        'name': lines[0] if lines else '',
+        'email': email_match.group(0) if email_match else None,
+        'phone': phone_match.group(0) if phone_match else None,
+        'linkedin': linkedin_match.group(0) if linkedin_match else None,
+        'github': github_match.group(0) if github_match else None,
+        'professional_summary': summary_text,
+        'skills': skills,
+        'experience': ([{'job_title': '', 'company': '', 'start_date': '', 'end_date': '', 'duration_months': 0, 'description': experience_text}] if experience_text else []),
+        'education': ([{'degree': '', 'institution': '', 'year': '', 'description': education_text}] if education_text else []),
+        'certifications': [],
+        'projects': ([{'title': '', 'description': projects_text, 'technologies': _extract_known_skills(projects_text)}] if projects_text else []),
+        'action_verbs': list(dict.fromkeys(verb.lower() for verb in action_verbs)),
+        'keywords': skills,
+    })
+
+
+def _local_jd_parse(raw_text: str) -> Dict:
+    skills = _extract_known_skills(raw_text)
+    required = []
+    preferred = []
+    for line in raw_text.splitlines():
+        line_skills = _extract_known_skills(line)
+        if re.search(r'\b(preferred|bonus|nice to have|plus)\b', line, re.I):
+            preferred.extend(line_skills)
+        elif re.search(r'\b(required|must have|requirements?|qualifications?)\b', line, re.I):
+            required.extend(line_skills)
+    return _validate_jd_result({
+        'job_title': '',
+        'required_skills': list(dict.fromkeys(required)) or skills,
+        'preferred_skills': list(dict.fromkeys(preferred)),
+        'experience_required': '',
+        'education_required': '',
+        'key_responsibilities': [],
+        'keywords': skills,
+    })
+
+
+def parse_resume(raw_text: str) -> Dict:
+    try:
+        return _parse_resume_with_groq(raw_text)
+    except Exception as exc:
+        logger.warning('Groq resume parsing unavailable; using local extraction: %s', exc)
+        return _local_resume_parse(raw_text)
+
+
+def parse_job_description(raw_text: str) -> Dict:
+    try:
+        return _parse_job_description_with_groq(raw_text)
+    except Exception as exc:
+        logger.warning('Groq JD parsing unavailable; using local extraction: %s', exc)
+        return _local_jd_parse(raw_text)
 
 #it will make sure, that the parse json has all the valid fields we expect
 def _validate_jd_result(result: dict) -> dict:
